@@ -1,0 +1,3 @@
+# Archivos binarios del repo PÚBLICO revisados por una persona (imágenes, PDF, Excel).
+# Formato: <SHA-256>  <ruta>   (dos espacios). Lo verifica scripts/revisar-datos-publicos.mjs.
+# Antes de agregar una línea, abre el archivo y confirma que solo muestra datos de demostración (docs/UI-UX.md §10).

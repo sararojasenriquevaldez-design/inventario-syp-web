@@ -1,0 +1,42 @@
+# ============================================================================
+# inventario-syp-web (repo PÚBLICO) — lo que nunca se sube
+# ============================================================================
+
+# --- Dependencias, compilación y reportes ---
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# --- Variables de entorno (la plantilla sí) ---
+.env
+.env.*
+!.env.example
+*.local
+
+# --- Despliegue y temporales de los sprints ---
+.vercel/
+_plantilla/
+
+# --- Claude Code (configuración personal de cada integrante) ---
+.claude/settings.local.json
+CLAUDE.local.md
+
+# --- Sistema operativo, editores y logs ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.sw?
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*

@@ -1,0 +1,19 @@
+# Lo que NO entra a la imagen de la web (docker build -f infra/Dockerfile .)
+# node_modules de Windows NO debe pisar el de Linux que instala la imagen.
+node_modules
+dist
+coverage
+playwright-report
+test-results
+blob-report
+.git
+.github
+.claude
+.vscode
+.vercel
+CLAUDE.md
+CLAUDE.local.md
+.env
+.env.*
+_plantilla
+*.log

@@ -1,0 +1,13 @@
+# Ajustes de pnpm 12 para inventario-syp-web.
+# Desde pnpm 11 los ajustes viven en este archivo aunque el repo NO sea monorepo
+# (.npmrc queda solo para registro/autenticación).
+
+# pnpm 12 FALLA la instalación (ERR_PNPM_IGNORED_BUILDS) si una dependencia trae scripts de
+# instalación sin revisar. true = se permite ejecutar su script; false = se ignora a propósito.
+# Si aparece un paquete nuevo en ese error, se decide AQUÍ (no uses "pnpm approve-builds": es interactivo).
+# Lista probada con pnpm 12.10.1 sobre la plantilla de Vite 8 (create-vite 9.2.1, react-ts) + las dependencias del plan.
+allowBuilds:
+  esbuild: true              # binario de esbuild (lo traen algunas herramientas de Vite/Vitest)
+
+# Por seguridad pnpm 12 no instala versiones publicadas hace menos de 24 h (minimumReleaseAge = 1440 min).
+# No lo desactives; si necesitas una versión recién publicada, espera un día.

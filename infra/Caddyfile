@@ -1,0 +1,30 @@
+# Caddy para la demostración en red local (sin dominio público).
+# SITE_ADDRESS = IP fija del servidor (p. ej. 192.168.1.50). Caddy emite el certificado con su CA interna.
+{
+	local_certs
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# API (mismo origen: la cookie de sesión funciona igual que en Vercel)
+	handle /api/inventario/* {
+		reverse_proxy api:3000
+	}
+
+	# SPA: cualquier otra ruta devuelve index.html
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
