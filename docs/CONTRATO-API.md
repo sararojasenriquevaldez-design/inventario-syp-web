@@ -43,16 +43,36 @@ POST /auth/logout (con el mismo header) → borra la cookie
 ```
 
 - **Single-flight**: si varias peticiones reciben 401 a la vez, se hace **un solo** refresh y todas esperan su resultado.
-- **Sin refresh automático** para `/auth/login` ni `/auth/refresh`: un 401 ahí se muestra o lleva a `/login` (si no, se crearía un bucle).
+- **Sin refresh automático** para `/auth/login` ni `/auth/refresh`: un 401 ahí se muestra o lleva a `/login` (si no, se crearía un bucle). Tampoco se refresca un 401 `CREDENCIALES_INVALIDAS` en otra ruta (p. ej. contraseña actual incorrecta en `/auth/cambiar-password`): no es un token vencido.
 - Login fallido: 401 `CREDENCIALES_INVALIDAS` (mismo mensaje para contraseña incorrecta y cuenta bloqueada); demasiados intentos: 429 `DEMASIADAS_SOLICITUDES`.
-- Al cargar la app se intenta un refresh silencioso para recuperar la sesión (si hay cookie válida).
+- Al cargar la app primero se despierta la API con `GET /salud` y luego se intenta un refresh silencioso para recuperar la sesión (si hay cookie válida).
 - Nunca `localStorage` ni `sessionStorage` para tokens.
 - Roles con prefijo de módulo: se consultan solo con `lib/roles.ts` → `tieneRol('inventario', 'CONTADOR')`.
-- Access token de 15 min; sesión (refresh) de 12 h; 5 intentos fallidos bloquean 15 min (la respuesta sigue siendo `CREDENCIALES_INVALIDAS`).
+- Access token de 15 min; sesión (refresh) de 12 h **desde el login** (el refresh rotado hereda el vencimiento); 5 intentos fallidos bloquean 15 min (la respuesta sigue siendo `CREDENCIALES_INVALIDAS`).
+- Si el refresh responde 429 o 5xx, la sesión **no** se cierra (la API no usó la cookie); solo 401/403 la cierran.
+
+### 3.1 Cambio de contraseña obligatorio (pendiente del S4 de la API)
+
+- Si `usuario.debeCambiarPassword` es `true` (primer ingreso o contraseña restablecida), el usuario solo puede usar `/auth/me`, `/auth/cambiar-password` y `/auth/logout`. El resto responde **403 `CAMBIO_PASSWORD_REQUERIDO`**.
+- Es 403 y **no** 401 a propósito: el cliente **no intenta refresh ni reintento**; marca la sesión con `debeCambiarPassword: true` y navega a **`/cambiar-password`**. `RutaProtegida` no deja entrar a ninguna página del módulo hasta cambiarla.
+- `POST /auth/cambiar-password {actual, nueva}` (nueva: 12 a 200 caracteres) responde **200 con una sesión nueva** (`{accessToken, usuario}`) y revoca las anteriores.
+
+### 3.2 Un solo refresh a la vez, también entre pestañas (pendiente del S4 de la API)
+
+La cookie de refresh es **una sola para todas las pestañas** y la API la **rota** en cada uso. Si dos pestañas envían a la vez la **misma** cookie, la API lo toma como reutilización (`REFRESH_REUTILIZADO`), revoca la familia y **cierra la sesión**. Por eso (`src/api/coordinacion-pestanas.ts`):
+
+1. Dentro de la pestaña: *single-flight* (una sola promesa de refresh compartida).
+2. Entre pestañas: un candado. Se usa **`navigator.locks`** (Web Locks API, nombre `inventario-syp:refresh`). Si no existe, un **candado de respaldo con `BroadcastChannel`** (`inventario-syp:sesion`): la pestaña anuncia `refresh-iniciado` con un id aleatorio, espera 50 ms para detectar empates (gana el id menor) y avisa `refresh-terminado` al acabar; el candado de una pestaña que se cerró a medias vence a los 30 s. Si tampoco hay `BroadcastChannel`, solo queda el single-flight de la pestaña.
+3. La pestaña que esperaba, al obtener el candado, hace **su propio** refresh con la cookie **ya rotada**: es secuencial, no reutilización.
+4. **El access token nunca viaja entre pestañas.** Cada una guarda solo el suyo en memoria. Por el canal solo pasan avisos sin secretos: `refresh-terminado`, `logout` (cierra la sesión en todas las pestañas) y, solo en el candado de respaldo, `refresh-iniciado` con el id aleatorio. Una prueba (`cliente.test.ts`) verifica que ningún mensaje contiene el token ni datos del usuario.
+5. El refresh **no** se repite ante 504 o tiempo agotado (si la API lo hubiera procesado, repetirlo con la cookie vieja sería reutilización); sí ante 502/503.
 
 ## 4. Servidor dormido (plan gratuito)
 
-Render duerme la API tras 15 min sin uso; despertar tarda ~1 min. Ante **502, 503, 504 o tiempo agotado** el cliente reintenta con esperas crecientes (2, 4, 8, 16… s) hasta ~90 s mostrando `BannerServidor`. `GET /salud` no toca la base y sirve para despertar; `GET /salud/bd` despierta también la base (Neon).
+Render duerme la API tras 15 min sin uso; despertar tarda ~1 min. Ante **502, 503, 504 o tiempo agotado** (30 s por intento) el cliente reintenta con esperas crecientes (2, 4, 8, 16, 32 s) hasta ~90 s mostrando `BannerServidor`. `GET /salud` no toca la base y sirve para despertar; `GET /salud/bd` despierta también la base (Neon).
+
+- **502/503** (la API no recibió la petición): se reintenta cualquier método.
+- **504 o tiempo agotado** (la API quizá la procesó): solo se reintentan los GET y el login. Una escritura no se repite (podría duplicar un comprobante): se muestra "El servidor no respondió a tiempo. Si estabas guardando algo, revisa si se registró antes de repetirlo." (`SIN_RESPUESTA`, código propio del cliente).
 
 ## 5. Stock negativo
 
@@ -70,12 +90,18 @@ Roles: **A** ADMIN · **C** CONTADOR · **S** ASISTENTE · **Q** CONSULTA · "to
 | Método | Ruta | Roles | Pantalla |
 |---|---|---|---|
 | GET | `/salud` (`{estado, version, hora, demo}`), `/salud/bd` | público | cliente (despertar) y etiqueta de demostración |
-| GET | `/catalogos` | todos | selects de Tablas SUNAT 2, 5, 6, 10, 12, 14 |
-| POST | `/auth/login` · `/auth/refresh` · `/auth/logout` | público · público · autenticado | sesión |
-| GET | `/auth/me` | todos | menú de usuario |
-| POST | `/auth/cambiar-password` | todos | Cambiar contraseña |
-| GET / POST / PATCH | `/usuarios` · `/usuarios/:id` | A | Usuarios |
-| POST | `/usuarios/:id/restablecer-password` | A | Usuarios |
+| GET | `/catalogos` | todos (**requiere token desde el S4**; sin token, 401) | selects de Tablas SUNAT 2, 5, 6, 10, 12, 14 |
+| POST | `/auth/login` (`{email, password}`, solo JSON) | público | Iniciar sesión → `{accessToken, usuario}` + cookie |
+| POST | `/auth/refresh` (cookie + `X-Requested-With`) | público | cliente → `{accessToken, usuario}` + cookie rotada |
+| POST | `/auth/logout` (`X-Requested-With`) | autenticado | menú de usuario → 204, borra la cookie |
+| GET | `/auth/me` | todos (también con cambio pendiente) | menú de usuario → `usuario` |
+| POST | `/auth/cambiar-password` (`{actual, nueva}`) | todos (también con cambio pendiente) | Cambiar contraseña → sesión nueva |
+| GET | `/auth/jwks` | público | futuro login central (la web no lo usa) |
+| GET / POST | `/usuarios` (`?pagina&tamano`) | A | Usuarios. Crear `{email, nombre, roles}` → contraseña temporal **una sola vez** |
+| PATCH | `/usuarios/:id` (`{nombre?, roles?, activo?}`) | A | Usuarios. Desactivar o cambiar roles cierra sus sesiones |
+| POST | `/usuarios/:id/restablecer-password` | A | Usuarios → contraseña temporal nueva (una vez) |
+
+En `/usuarios` los roles van **sin prefijo** (`"CONTADOR"`); en el token y en `/auth/*`, **con prefijo** (`"inventario:CONTADOR"`). Un ADMIN no puede quitarse su rol ni desactivarse, y la API nunca deja el sistema sin ADMIN. Límites: login y cambiar-password 5/min, refresh 30/min.
 | GET / PATCH | `/configuracion` | todos / A (C: libro y WinConta) | Configuración |
 | GET / PUT | `/configuracion/libro-modo/:anio` | todos / A, C | Configuración → Libro 12.1 |
 | GET / POST / PATCH | `/establecimientos` | todos / A | Maestros |

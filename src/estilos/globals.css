@@ -1,0 +1,158 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Tema oscuro con la clase .dark en <html> (la pone app/tema.tsx). */
+@custom-variant dark (&:is(.dark *));
+
+/* Tokens de docs/UI-UX.md §2 con los nombres estándar de shadcn (intercambiables con otros módulos). */
+@theme inline {
+  /* Pila del sistema: sin fuentes externas (CSP). En Windows se ve Segoe UI. */
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Tema claro (por defecto) */
+:root {
+  --radius: 0.625rem;
+
+  --background: #f6f6f3;
+  --foreground: #1c1f24;
+  --card: #ffffff;
+  --card-foreground: #1c1f24;
+  --popover: #ffffff;
+  --popover-foreground: #1c1f24;
+  --muted: #eef1f5;
+  --muted-foreground: #5b616b;
+  --secondary: #eef1f5;
+  --secondary-foreground: #1c1f24;
+  --accent: #eef1f5;
+  --accent-foreground: #1c1f24;
+  --border: #dedfda;
+  --input: #dedfda;
+  --primary: #1f4e79;
+  --primary-foreground: #ffffff;
+  --ring: #1f4e79;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --success: #15803d;
+  --success-foreground: #ffffff;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+  --chart-1: #52525b;
+  --chart-2: #0e7490;
+  --chart-3: #b4602a;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1c1f24;
+  --sidebar-primary: #1f4e79;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef1f5;
+  --sidebar-accent-foreground: #1c1f24;
+  --sidebar-border: #dedfda;
+  --sidebar-ring: #1f4e79;
+}
+
+/* Tema oscuro (opcional, desde el menú de usuario) */
+.dark {
+  --background: #0f1115;
+  --foreground: #e7e9ee;
+  --card: #171a21;
+  --card-foreground: #e7e9ee;
+  --popover: #171a21;
+  --popover-foreground: #e7e9ee;
+  --muted: #1e232c;
+  --muted-foreground: #a2a8b3;
+  --secondary: #1e232c;
+  --secondary-foreground: #e7e9ee;
+  --accent: #1e232c;
+  --accent-foreground: #e7e9ee;
+  --border: #2a303b;
+  --input: #2a303b;
+  --primary: #6aa5db;
+  --primary-foreground: #0f1115;
+  --ring: #6aa5db;
+  --destructive: #f87171;
+  --destructive-foreground: #0f1115;
+  --success: #4ade80;
+  --success-foreground: #0f1115;
+  --warning: #fbbf24;
+  --warning-foreground: #0f1115;
+  --chart-1: #a1a1aa;
+  --chart-2: #22d3ee;
+  --chart-3: #f0a06a;
+
+  --sidebar: #171a21;
+  --sidebar-foreground: #e7e9ee;
+  --sidebar-primary: #6aa5db;
+  --sidebar-primary-foreground: #0f1115;
+  --sidebar-accent: #1e232c;
+  --sidebar-accent-foreground: #e7e9ee;
+  --sidebar-border: #2a303b;
+  --sidebar-ring: #6aa5db;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground text-sm;
+  }
+  /* Foco visible de 2 px con --ring en todo lo interactivo (WCAG 2.4.7 / 2.4.13). */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
