@@ -10,6 +10,7 @@
 |---|---|---|---|
 | S0 Preparación | ✅ terminado (ver la bitácora de la API) | — | 18/10/2026 |
 | S5 Base de la web | ✅ terminado | `sprint/05-base-web` | 25/10/2026 |
+| S5 Corrección del CI (fix-ci) | ✅ terminado | `sprint/05-fix-ci` | 25/10/2026 |
 | S6 Nube temprana (WEB) | pendiente | `sprint/06-nube` | |
 | S7 Maestros (WEB) | pendiente | `sprint/07-maestros` | |
 | S8 Operaciones (WEB) | pendiente | `sprint/08-operaciones` | |
@@ -74,3 +75,36 @@ pnpm run dev  →  http://localhost:5173/login   (con la API en http://localhost
 5. Tema oscuro desde el menú de usuario; foco visible al recorrer con Tab.
 
 **Números**: 61 pruebas en 8 archivos (cliente 20, coordinación 6, formato 9, roles 4, errores 5, login 8, ruta protegida 5, menú 4). Cobertura total 74 % de líneas; `cliente.ts` 92 %, `formato.ts` 100 %.
+
+### S05 — fix-ci (25/10/2026)
+
+Rama `sprint/05-fix-ci`. Corrige el CI de `main`, que falló en `pnpm audit --prod --audit-level high` con 2 vulnerabilidades altas:
+- `zod` < 4.6.6 (GHSA-mrhx-c7xc-m3w5): por la dependencia directa `zod@4.6.5` y por `shadcn`.
+- `body-parser` >= 2.0.0 < 2.4.0 (GHSA-27r3-jxmh-p828): solo por `shadcn` > `@modelcontextprotocol/sdk` > `express`.
+
+**Qué se hizo**
+- `shadcn` 4.22.1 pasa de `dependencies` a `devDependencies` (`pnpm remove shadcn` y `pnpm add -D shadcn@4.22.1`). Al reinstalarse, `body-parser` quedó en 2.4.0 (ya corregida).
+- `zod` 4.6.5 → **4.6.6** (`pnpm add zod@4.6.6`); queda una sola versión en el árbol.
+- `vitest` y `@vitest/coverage-v8` 4.1.11 → **4.1.12** (`pnpm add -D vitest@4.1.12 @vitest/coverage-v8@4.1.12`): corrige 2 moderadas solo de desarrollo en `@vitest/mocker` 4.1.11 (GHSA-qxg6-89mg-rqv8 y GHSA-xp26-3454-mjgp).
+- Resultado: `pnpm audit --prod --audit-level high` y `pnpm audit` completo → sin vulnerabilidades.
+
+**Decisiones**
+- `shadcn` es un CLI: en el código solo aparece en `src/estilos/globals.css` (`@import "shadcn/tailwind.css"`), que Tailwind incorpora al CSS al compilar; el navegador nunca carga el paquete. Estaba en `dependencies` y por eso todo su árbol (servidor MCP, express…) contaba como producción. El CSS compilado sigue incluyendo las variantes `data-open`/`data-closed`, los tokens y `tw-animate-css`.
+- Revisión de `dependencies`: ninguna otra herramienta de línea de comandos. `cn` trae un binario, pero es la librería de clases que importan los componentes de `ui/` y `lib/utils.ts`: se queda.
+- Las moderadas de `@vitest/mocker` se resolvieron subiendo vitest dentro de la línea 4.1 del stack, **sin override**: un override habría desalineado los paquetes de vitest.
+
+**Pendientes**
+- Ninguno propio de esta corrección. Siguen los pendientes de S05 — base-web.
+
+**Cómo probar**
+```
+pnpm install ; pnpm audit ; pnpm audit --prod --audit-level high
+pnpm run lint ; pnpm test ; pnpm run test:cov ; pnpm run build ; pnpm run revisar:datos
+node .claude/hooks/probar-hooks.mjs
+pnpm run dev  →  http://localhost:5173/login   (con la API en http://localhost:3000)
+```
+1. Los dos `pnpm audit` deben decir "No known vulnerabilities found".
+2. Con la base de demostración de la API, entra con `contadora.demo@syp.invalid` y abre el menú de usuario: se despliega con animación y los estilos son los mismos que antes (los aporta `shadcn/tailwind.css` aunque ahora sea dependencia de desarrollo).
+3. En GitHub → Actions, el CI de `main` queda en verde.
+
+**Números**: 61 pruebas en 8 archivos, todas en verde; cobertura 74,6 % de líneas (`cliente.ts` 91,8 %, `formato.ts` 100 %).
