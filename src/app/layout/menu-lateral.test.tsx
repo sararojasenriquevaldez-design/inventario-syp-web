@@ -53,9 +53,15 @@ describe('menú lateral según el rol', () => {
     expect(menu.queryByRole('link', { name: 'Respaldo' })).not.toBeInTheDocument()
   })
 
+  it.each(['CONTADOR', 'ASISTENTE', 'CONSULTA'])('%s no ve Importación', (rol) => {
+    const menu = renderizar([`inventario:${rol}`])
+    expect(menu.queryByRole('link', { name: 'Importación' })).not.toBeInTheDocument()
+  })
+
   it('ADMIN ve todo y la página actual queda marcada', () => {
     const menu = renderizar(['inventario:ADMIN'])
     expect(menu.getByRole('link', { name: 'Usuarios' })).toBeInTheDocument()
+    expect(menu.getByRole('link', { name: 'Importación' })).toHaveAttribute('href', '/inventario/configuracion/importacion')
     expect(menu.getByRole('link', { name: 'Auditoría' })).toBeInTheDocument()
     expect(menu.getByRole('link', { name: 'Kardex' })).toHaveAttribute('aria-current', 'page')
   })

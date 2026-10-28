@@ -100,8 +100,6 @@ Roles: **A** ADMIN · **C** CONTADOR · **S** ASISTENTE · **Q** CONSULTA · "to
 | GET / POST | `/usuarios` (`?pagina&tamano`) | A | Usuarios. Crear `{email, nombre, roles}` → contraseña temporal **una sola vez** |
 | PATCH | `/usuarios/:id` (`{nombre?, roles?, activo?}`) | A | Usuarios. Desactivar o cambiar roles cierra sus sesiones |
 | POST | `/usuarios/:id/restablecer-password` | A | Usuarios → contraseña temporal nueva (una vez) |
-
-En `/usuarios` los roles van **sin prefijo** (`"CONTADOR"`); en el token y en `/auth/*`, **con prefijo** (`"inventario:CONTADOR"`). Un ADMIN no puede quitarse su rol ni desactivarse, y la API nunca deja el sistema sin ADMIN. Límites: login y cambiar-password 5/min, refresh 30/min.
 | GET / PATCH | `/configuracion` | todos / A (C: libro y WinConta) | Configuración |
 | GET / PUT | `/configuracion/libro-modo/:anio` | todos / A, C | Configuración → Libro 12.1 |
 | GET / POST / PATCH | `/establecimientos` | todos / A | Maestros |
@@ -137,11 +135,26 @@ En `/usuarios` los roles van **sin prefijo** (`"CONTADOR"`); en el token y en `/
 | POST | `/tomas-inventario/:id/resolver` | A, C | Toma de inventario |
 | GET | `/dashboard?anio` | todos | Dashboard |
 | POST | `/importacion/historico` | A | Importación y paridad |
-| GET | `/importacion/paridad?anio` | A, C | Importación y paridad, Paridad con Excel |
-
-Con la API en modo demostración (`/salud` → `demo: true`), `/importacion/*` responde 409 `NO_DISPONIBLE_EN_DEMO`.
+| GET | `/importacion/paridad` (sin filtros) | A, C | Importación y paridad, Paridad con Excel |
 | GET | `/respaldo/descargar` · `/respaldo/exportar-datos` | A | Respaldo |
 | GET | `/auditoria` · `/auditoria/accesos` | A | Auditoría |
+
+En `/usuarios` los roles van **sin prefijo** (`"CONTADOR"`); en el token y en `/auth/*`, **con prefijo** (`"inventario:CONTADOR"`). Un ADMIN no puede quitarse su rol ni desactivarse, y la API nunca deja el sistema sin ADMIN. Cada usuario trae `passwordTemporalExpira` (ISO, 72 h; `null` = no vence): pasada esa hora el login responde 401 y hay que restablecerla (tipo `Usuario` en `src/api/usuarios.ts`). Límites: login y cambiar-password 5/min, refresh 30/min.
+
+### 6.1 Importación y paridad (S6, `src/api/importacion.ts`)
+
+| Llamada | Respuesta |
+|---|---|
+| `POST /importacion/historico` (sin cuerpo) | **201** `{ loteId, hashSha256, resumen: { terceros, saldosIniciales, comprobantes, movimientos, controlTonelaje, periodos, kardexRecalculados, alertas: { CODIGO: n } } }` |
+| | **409 `HISTORICO_YA_CARGADO`**: esos años ya tienen saldos o movimientos, o el mismo lote ya se aplicó. Se muestra como aviso informativo (repetir no duplica). |
+| `GET /importacion/paridad` | **200** `{ filas: [{ anio, productoCodigo, kardex, resumen, libro }], asientos: [{ anio, asientos }], maxima: { guardado, motor }, alertas, detalle: [string], totalDiferencias }` |
+| ambas | **409 `NO_DISPONIBLE_EN_DEMO`** con la API en modo demostración (`/salud` → `demo: true`): aviso en lugar del resultado. |
+
+- Cada conteo trae dos caminos: `guardado` (valores de la base) y `motor` (recalculados al leer), con `{ comparados, diferencias }`; en `libro` también `nuevas` y `resueltas` (las diferencias conocidas cuentan como comparadas). La diferencia máxima es **una sola** para toda la respuesta (no hay por fila) y llega como texto (`"2.58e-10"`): se muestra tal cual. Tolerancia 0.000001.
+- `paridad` no acepta `?anio` (devuelve todos los años).
+- **Tiempos**: las dos tardan de 1 a 3 minutos. El front primero despierta la API con `GET /salud` (reintentos de §4) y luego llama con `tiempoMs: 240_000` por intento.
+- **Corte del proxy**: en la nube Vercel → Render puede cortar antes de 240 s con 502/504 aunque la API siga procesando. Por eso el POST va con `proxyPuedeCortar: true` (el 502 cuenta como "quizá llegó") y nunca se repite solo: 502, 504 o tiempo agotado → `SIN_RESPUESTA` y la pantalla avisa que espere 2–3 minutos y pulse «Verificar paridad». Volver a cargar no duplica (409 `HISTORICO_YA_CARGADO`).
+- No hay endpoint de "última carga" (pendiente para el S12).
 
 ## 7. Ejemplos (datos de demostración)
 

@@ -209,6 +209,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inventario/v1/importacion/historico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Carga el histórico incluido en el servidor en una base vacía (una sola vez)
+         * @description Si esos años ya tienen saldos o movimientos, o el mismo lote ya se aplicó → 409 HISTORICO_YA_CARGADO. En modo demostración → 409 NO_DISPONIBLE_EN_DEMO.
+         */
+        post: operations["ImportacionController_cargarHistorico"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventario/v1/importacion/paridad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paridad de la BD con los resultados de referencia por año y producto
+         * @description Compara los valores guardados y los del motor (tolerancia 0.000001). En modo demostración → 409 NO_DISPONIBLE_EN_DEMO.
+         */
+        get: operations["ImportacionController_verificarParidad"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -296,6 +336,11 @@ export interface components {
             activo: boolean;
             /** @example true */
             debeCambiarPassword: boolean;
+            /**
+             * @description Vencimiento de la contraseña temporal (72 h). Pasada esa hora el login responde 401 y hay que restablecerla. null = no vence
+             * @example 2026-10-04T09:00:00.000Z
+             */
+            passwordTemporalExpira: string | null;
             /**
              * @description true si está bloqueado por intentos fallidos
              * @example false
@@ -444,6 +489,122 @@ export interface components {
             tiposOperacion: components["schemas"]["TipoOperacionDto"][];
             /** @description Tabla 14 */
             metodosValuacion: components["schemas"]["ItemCatalogoDto"][];
+        };
+        ResumenImportacionDto: {
+            /** @example 12 */
+            terceros: number;
+            /** @example 9 */
+            saldosIniciales: number;
+            /** @example 40 */
+            comprobantes: number;
+            /** @example 60 */
+            movimientos: number;
+            /** @example 12 */
+            controlTonelaje: number;
+            /**
+             * @description Periodos creados (ABIERTOS)
+             * @example 36
+             */
+            periodos: number;
+            /**
+             * @description Kardex (producto × año)
+             * @example 9
+             */
+            kardexRecalculados: number;
+            /**
+             * @description Cantidad de movimientos con cada alerta del kardex
+             * @example {
+             *       "STOCK_NEGATIVO": 2
+             *     }
+             */
+            alertas: {
+                [key: string]: number;
+            };
+        };
+        ImportacionHistoricoDto: {
+            /** @example 3f2b8c1e-5a4d-4e7f-9b6a-1c2d3e4f5a6b */
+            loteId: string;
+            /**
+             * @description SHA-256 de los CSV cargados (huella del lote)
+             * @example 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+             */
+            hashSha256: string;
+            resumen: components["schemas"]["ResumenImportacionDto"];
+        };
+        ConteoCaminoDto: {
+            /** @example 120 */
+            comparados: number;
+            /** @example 0 */
+            diferencias: number;
+        };
+        ConteosDto: {
+            /** @description Valores guardados en la BD */
+            guardado: components["schemas"]["ConteoCaminoDto"];
+            /** @description Valores recalculados por el motor al leer */
+            motor: components["schemas"]["ConteoCaminoDto"];
+        };
+        ConteoLibroDto: {
+            /** @example 120 */
+            comparados: number;
+            /** @example 0 */
+            diferencias: number;
+            /**
+             * @description Diferencias que no son conocidas
+             * @example 0
+             */
+            nuevas: number;
+            /**
+             * @description Diferencias conocidas que ya no aparecen
+             * @example 0
+             */
+            resueltas: number;
+        };
+        ConteosLibroDto: {
+            guardado: components["schemas"]["ConteoLibroDto"];
+            motor: components["schemas"]["ConteoLibroDto"];
+        };
+        FilaParidadDto: {
+            /** @example 2026 */
+            anio: number;
+            /** @example D-FIERRO */
+            productoCodigo: string;
+            kardex: components["schemas"]["ConteosDto"];
+            resumen: components["schemas"]["ConteosDto"];
+            /** @description Libro 12.1: las diferencias conocidas se cuentan en comparados; solo las nuevas o resueltas son diferencias */
+            libro: components["schemas"]["ConteosLibroDto"];
+        };
+        FilaAsientosDto: {
+            /** @example 2026 */
+            anio: number;
+            asientos: components["schemas"]["ConteosDto"];
+        };
+        MaximaDto: {
+            /** @example 2.58e-10 */
+            guardado: string;
+            /** @example 3.83e-11 */
+            motor: string;
+        };
+        ParidadDto: {
+            filas: components["schemas"]["FilaParidadDto"][];
+            asientos: components["schemas"]["FilaAsientosDto"][];
+            /** @description Mayor diferencia encontrada (tolerancia 0.000001) */
+            maxima: components["schemas"]["MaximaDto"];
+            /**
+             * @description Cantidad de movimientos con cada alerta del kardex
+             * @example {
+             *       "STOCK_NEGATIVO": 2
+             *     }
+             */
+            alertas: {
+                [key: string]: number;
+            };
+            /**
+             * @description Cada diferencia real con año, producto, orden y columna (vacío si hay paridad)
+             * @example []
+             */
+            detalle: string[];
+            /** @example 0 */
+            totalDiferencias: number;
         };
     };
     responses: never;
@@ -724,6 +885,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogosRespuestaDto"];
+                };
+            };
+        };
+    };
+    ImportacionController_cargarHistorico: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacionHistoricoDto"];
+                };
+            };
+        };
+    };
+    ImportacionController_verificarParidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParidadDto"];
                 };
             };
         };

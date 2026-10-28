@@ -11,7 +11,7 @@
 | S0 Preparación | ✅ terminado (ver la bitácora de la API) | — | 18/10/2026 |
 | S5 Base de la web | ✅ terminado | `sprint/05-base-web` | 25/10/2026 |
 | S5 Corrección del CI (fix-ci) | ✅ terminado | `sprint/05-fix-ci` | 25/10/2026 |
-| S6 Nube temprana (WEB) | pendiente | `sprint/06-nube` | |
+| S6 Nube temprana (WEB) | ✅ terminado | `sprint/06-nube` | 27/10/2026 |
 | S7 Maestros (WEB) | pendiente | `sprint/07-maestros` | |
 | S8 Operaciones (WEB) | pendiente | `sprint/08-operaciones` | |
 | S9 Kardex y periodos (WEB) | pendiente | `sprint/09-kardex-periodos` | |
@@ -108,3 +108,56 @@ pnpm run dev  →  http://localhost:5173/login   (con la API en http://localhost
 3. En GitHub → Actions, el CI de `main` queda en verde.
 
 **Números**: 61 pruebas en 8 archivos, todas en verde; cobertura 74,6 % de líneas (`cliente.ts` 91,8 %, `formato.ts` 100 %).
+
+### S06 — nube (27/10/2026)
+
+Rama `sprint/06-nube`. Tipos regenerados con `pnpm run api:tipos` (`/importacion/*` y `passwordTemporalExpira`).
+
+**Qué se hizo**
+- Pantalla **Importación y paridad** (`/inventario/configuracion/importacion`, solo ADMIN; `src/funcionalidades/importacion/`):
+  - «Cargar histórico 2024–2026» con `DialogoConfirmacion`. 201 → resumen (terceros, saldos iniciales, comprobantes, movimientos, control de tonelaje, periodos, kardex recalculados y alertas, con el lote y su huella). 409 `HISTORICO_YA_CARGADO` → aviso informativo; 409 `NO_DISPONIBLE_EN_DEMO` → aviso de demostración.
+  - 502/504 o tiempo agotado al cargar → aviso "La carga puede seguir procesándose en el servidor…" (no un error genérico).
+  - «Verificar paridad»: tabla por año y producto (kardex, resumen mensual y libro 12.1: filas comparadas y diferencias BD / motor; nuevas y resueltas del libro; estado con ícono y texto), asientos por año, diferencia máxima, alertas y el detalle de cada diferencia tal como viene de la API.
+  - Los dos botones se bloquean mientras corre cualquiera de las operaciones; mensaje en `aria-live` ("Puede tardar de 1 a 3 minutos") y esqueleto de la tabla.
+- Revisión `revisor-ux` (aprobada con observaciones, sin hallazgos altos). Se corrigieron los 3 de severidad media:
+  - `DialogoConfirmacion` acepta `focoAlCerrar`: al cancelar, pulsar Esc o confirmar, el foco vuelve al botón que lo abrió (antes caía en `<body>` porque el diálogo se abre controlado, sin `AlertDialogTrigger`).
+  - Los botones se bloquean con `aria-disabled` (más un control en `onClick`) en vez de `disabled`, para que el foco no salte a `<body>`; «Reintentar» de paridad pasa antes el foco a «Verificar paridad». La región `aria-live` queda siempre montada y anuncia también el final ("Terminó la verificación de paridad: todo coincide.", "Terminó la carga del histórico.", etc.).
+  - La diferencia máxima (BD y motor) se muestra con `formatearDiferencia` (`lib/formato.ts`): primero los 6 decimales de la tolerancia y, si no es exactamente 0, el valor exacto en notación legible: `2.58e-10` → `0.000000 (2.58 × 10⁻¹⁰)`; `0` → `0.000000`. Antes salía `2.58e-10` en bruto. Para lectores de pantalla, lo visible va con `aria-hidden` y un texto `sr-only` de `leerDiferencia` dice "0.000000, valor exacto 2.58 por 10 a la menos 10" (los superíndices no se leen igual en todos los lectores).
+  - Tras cargar se invalidan kardex, stock, dashboard, periodos y comprobantes (`src/api/claves.ts`) y se descarta la paridad anterior.
+- `api/cliente.ts`: opciones `tiempoMs` (tiempo por intento; por defecto 30 s) y `proxyPuedeCortar` (un 502 cuenta como "quizá llegó": una escritura no se repite). `api/importacion.ts` despierta primero la API con `GET /salud` y llama con 240 s por intento.
+- Comunes nuevos de §4: `DialogoConfirmacion` (sin motivo; el motivo llega en el S8) y `EstadoError`. `lib/formato.ts`: `formatearEntero`, `formatearDiferencia` y `leerDiferencia`.
+- `src/api/usuarios.ts`: tipo `Usuario` con `passwordTemporalExpira` (sin pantalla: es del S7).
+- `vercel.json` revisado sin cambios: el rewrite ya apuntaba a la API en Render; `installCommand` con pnpm 12.10.1, rewrite de `/api/inventario/*` antes del fallback del SPA y CSP con `connect-src 'self'`, sin orígenes externos. Sin variables de entorno de Vercel.
+- `docs/CONTRATO-API.md` §6.1 (importación y paridad) y la tabla de §6 reparada (dos párrafos la cortaban).
+
+**Decisiones**
+- Lo que el OpenAPI no trae no se inventa: paridad **sin `?anio`**, diferencia máxima **solo en el resumen** (la API la da una vez, no por fila) y **sin "Última carga"** (no hay endpoint).
+- Antes de una operación larga se despierta la API con `GET /salud`: así el servidor dormido usa los reintentos normales y los 240 s cuentan solo para la operación.
+- El POST del histórico nunca se repite solo: en la nube el proxy Vercel → Render puede cortar antes aunque la API siga trabajando. Repetirlo a mano es seguro (409 `HISTORICO_YA_CARGADO`).
+- CSP sin cambios: `style-src 'unsafe-inline'` sigue porque Radix y sonner ponen estilos en línea; los scripts en línea ya están bloqueados.
+
+**Pendientes**
+- S12: "Última carga: fecha · lote" en esta pantalla (necesita un endpoint en la API).
+- S13: endurecer la CSP (quitar `'unsafe-inline'` de `style-src` si Radix y sonner lo permiten, p. ej. con nonce o hashes).
+- Siguen los pendientes del S05 (bundle de 719 kB → rutas *lazy*).
+- Observaciones de severidad baja del `revisor-ux` (pendientes):
+  - Boceto §5.19: faltan "Última carga" (ver pendiente del S12) y la columna "Dif. máxima" por fila (la API solo da la máxima global).
+  - `resumen-carga.tsx`: la huella SHA-256 completa solo se ve en el `title` (no llega con teclado ni lector de pantalla) → `<details>` o botón «Copiar huella».
+  - `tabla-paridad.tsx`: la lista con desplazamiento "Detalle de las diferencias" no es enfocable → `tabIndex={0}`, `role="region"`, `aria-labelledby` y anillo de foco.
+  - `SIN_RESPUESTA` en «Verificar paridad» (una consulta) muestra el texto genérico "Si estabas guardando algo…" → mensaje propio de la consulta.
+  - Con `SIN_RESPUESTA` o `HISTORICO_YA_CARGADO` al cargar no se invalidan kardex, stock, dashboard, periodos ni comprobantes (la carga pudo terminar en el servidor) → misma invalidación que tras el 201.
+  - `aviso.tsx` une las clases con un template string → `cn()`.
+
+**Cómo probar**
+```
+pnpm run lint ; pnpm test ; pnpm run build ; pnpm run revisar:datos
+node .claude/hooks/probar-hooks.mjs
+pnpm run dev  →  http://localhost:5173/inventario/configuracion/importacion   (API con pnpm run start:dev)
+```
+1. Entra como ADMIN (`admin@syp.invalid`, el ADMIN del `.env.example` de la API): el menú Administración muestra «Importación». Con `contadora.demo@syp.invalid`, `asistente.demo@syp.invalid` o `consulta.demo@syp.invalid` no aparece y la URL directa no deja entrar.
+2. «Cargar histórico 2024–2026» → diálogo. Cancelar no hace nada; confirmar bloquea los dos botones y al terminar muestra el resumen. Una segunda carga muestra «El histórico ya estaba cargado».
+3. «Verificar paridad» → tabla por año y producto, asientos, diferencia máxima con 6 decimales (y el valor exacto entre paréntesis si no es 0) y, si hay diferencias, su detalle.
+4. Solo con teclado: Tab hasta «Cargar histórico», Enter, Esc → el foco vuelve al botón. Enter en «Verificar paridad» → el foco se queda en el botón mientras verifica y el lector de pantalla anuncia el final.
+5. Con la API en modo demostración (`pnpm run start:demo`) los dos botones muestran el aviso de demostración.
+
+**Números**: 81 pruebas en 9 archivos (página de importación 11, menú +3, cliente +2, formato +4).

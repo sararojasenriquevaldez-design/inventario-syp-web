@@ -222,6 +222,29 @@ describe('cliente de la API: servidor dormido', () => {
     await expect(promesa).resolves.toEqual({ id: 1 })
     expect(simulado).toHaveBeenCalledTimes(2)
   })
+
+  it('tiempoMs amplía el tiempo por intento de una operación larga', async () => {
+    vi.useFakeTimers()
+    const p = await abrirPestana()
+    let senal: AbortSignal | null | undefined
+    usarFetch((_url, init) => {
+      senal = init.signal
+      return new Promise<Response>((resolver) => setTimeout(() => resolver(respuestaJson({ ok: true }, 201)), 120_000))
+    })
+    const promesa = p.cliente.solicitar('/importacion/historico', { metodo: 'POST', tiempoMs: 240_000 })
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(senal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(90_000)
+    await expect(promesa).resolves.toEqual({ ok: true })
+  })
+
+  it('con proxyPuedeCortar un 502 en una escritura NO se repite: avisa que revise', async () => {
+    const p = await abrirPestana()
+    const simulado = usarFetch(() => respuestaJson({}, 502))
+    await expect(p.cliente.solicitar('/importacion/historico', { metodo: 'POST', proxyPuedeCortar: true }))
+      .rejects.toMatchObject({ codigo: 'SIN_RESPUESTA' })
+    expect(simulado).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('cliente de la API: coordinación entre pestañas', () => {

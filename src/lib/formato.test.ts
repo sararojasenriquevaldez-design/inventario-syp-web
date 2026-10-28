@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  fechaAIso, formatearCU, formatearDecimal, formatearDocumento, formatearFecha, formatearPeriodo, formatearSoles,
-  formatearTipoCambio, formatearToneladas,
+  fechaAIso, formatearCU, formatearDecimal, formatearDiferencia, formatearDocumento, formatearEntero, formatearFecha, formatearPeriodo,
+  formatearSoles, formatearTipoCambio, formatearToneladas, leerDiferencia,
 } from './formato'
 
 describe('formato es-PE (docs/UI-UX.md §9)', () => {
@@ -9,6 +9,11 @@ describe('formato es-PE (docs/UI-UX.md §9)', () => {
     expect(formatearToneladas('1234.5')).toBe('1,234.5000')
     expect(formatearToneladas('10')).toBe('10.0000')
     expect(formatearToneladas('1234567.12345')).toBe('1,234,567.1235')
+  })
+
+  it('conteos enteros con miles con coma', () => {
+    expect(formatearEntero(0)).toBe('0')
+    expect(formatearEntero(1234)).toBe('1,234')
   })
 
   it('soles con 2 decimales y prefijo S/', () => {
@@ -20,6 +25,7 @@ describe('formato es-PE (docs/UI-UX.md §9)', () => {
     expect(formatearDecimal('0.005', 2)).toBe('0.01')
     expect(formatearDecimal('1.0049999999999999999', 2)).toBe('1.00')
     expect(formatearDecimal('12345678901234567890.125', 2)).toBe('12,345,678,901,234,567,890.13')
+    expect(formatearDecimal('2.58e-10', 6)).toBe('0.000000')
   })
 
   it('negativos con signo menos y sin "-0"', () => {
@@ -56,5 +62,31 @@ describe('formato es-PE (docs/UI-UX.md §9)', () => {
   it('documento con número de 7 dígitos', () => {
     expect(formatearDocumento('F001', '123')).toBe('F001-0000123')
     expect(formatearDocumento('00-AI', '0001')).toBe('00-AI-0000001')
+  })
+
+  it('diferencia de paridad: 6 decimales y el valor exacto con × 10 y superíndice', () => {
+    expect(formatearDiferencia('2.58e-10')).toBe('0.000000 (2.58 × 10⁻¹⁰)')
+    expect(formatearDiferencia('3.83e-11')).toBe('0.000000 (3.83 × 10⁻¹¹)')
+    expect(formatearDiferencia('0.0100')).toBe('0.010000 (1 × 10⁻²)')
+    expect(formatearDiferencia('-2.5e-7')).toBe('0.000000 (-2.5 × 10⁻⁷)')
+    expect(formatearDiferencia('12.5')).toBe('12.500000 (1.25 × 10¹)')
+    expect(formatearDiferencia('1.000000')).toBe('1.000000 (1 × 10⁰)')
+  })
+
+  it('diferencia exactamente cero: solo los 6 decimales', () => {
+    expect(formatearDiferencia('0')).toBe('0.000000')
+    expect(formatearDiferencia('0.000000')).toBe('0.000000')
+    expect(formatearDiferencia('0e0')).toBe('0.000000')
+    expect(formatearDiferencia(null)).toBe('—')
+    expect(formatearDiferencia('abc')).toBe('abc')
+  })
+
+  it('diferencia en palabras para lectores de pantalla', () => {
+    expect(leerDiferencia('2.58e-10')).toBe('0.000000, valor exacto 2.58 por 10 a la menos 10')
+    expect(leerDiferencia('0.0100')).toBe('0.010000, valor exacto 1 por 10 a la menos 2')
+    expect(leerDiferencia('-2.5e-7')).toBe('0.000000, valor exacto menos 2.5 por 10 a la menos 7')
+    expect(leerDiferencia('12.5')).toBe('12.500000, valor exacto 1.25 por 10 a la 1')
+    expect(leerDiferencia('0')).toBe('0.000000')
+    expect(leerDiferencia(null)).toBe('—')
   })
 })
