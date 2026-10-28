@@ -3,6 +3,7 @@
 //  - 401 → un solo refresh a la vez (single-flight en la pestaña + candado entre pestañas) y UN reintento.
 //  - 403 CAMBIO_PASSWORD_REQUERIDO → a /cambiar-password, sin refresh ni reintento.
 //  - 502/503/504 o tiempo agotado → "Despertando el servidor…" con esperas crecientes hasta ~90 s.
+//  - Operaciones largas (importación): tiempo propio por intento y el 502 del proxy cuenta como "quizá llegó".
 import { crearCoordinador, type Coordinador } from './coordinacion-pestanas'
 import { empezarDespertar, terminarDespertar } from './estado-servidor'
 import type { components } from './esquema'
@@ -37,6 +38,13 @@ export type OpcionesSolicitud = {
   sinRefresh?: boolean
   /** Reintentar también ante 504 o tiempo agotado (por defecto solo GET). Nunca en escrituras con efecto. */
   idempotente?: boolean
+  /** Tiempo máximo por intento (por defecto TIEMPO_POR_INTENTO_MS). Solo para operaciones largas (importación). */
+  tiempoMs?: number
+  /**
+   * Operación larga detrás del proxy (Vercel → Render): el proxy puede cortar con 502 mientras la API sigue
+   * procesando. Ese 502 se trata como un 504 (quizá llegó): una escritura no se repite.
+   */
+  proxyPuedeCortar?: boolean
   senal?: AbortSignal
 }
 
@@ -95,13 +103,13 @@ function dormir(ms: number, senal?: AbortSignal) {
   })
 }
 
-async function fetchConTiempo(url: string, init: RequestInit, senal?: AbortSignal): Promise<Response> {
+async function fetchConTiempo(url: string, init: RequestInit, tiempoMs: number, senal?: AbortSignal): Promise<Response> {
   const control = new AbortController()
   let agotado = false
   const temporizador = setTimeout(() => {
     agotado = true
     control.abort()
-  }, TIEMPO_POR_INTENTO_MS)
+  }, tiempoMs)
   const reenviarAbort = () => control.abort(senal?.reason)
   senal?.addEventListener('abort', reenviarAbort, { once: true })
   try {
@@ -139,8 +147,9 @@ async function enviar(ruta: string, opciones: OpcionesSolicitud, token: string |
       let fallo: 'no-llego' | 'quiza-llego'
       let respuesta: Response | null = null
       try {
-        respuesta = await fetchConTiempo(BASE_API + ruta, init, opciones.senal)
-        if (respuesta.status === 502 || respuesta.status === 503) fallo = 'no-llego'
+        respuesta = await fetchConTiempo(BASE_API + ruta, init, opciones.tiempoMs ?? TIEMPO_POR_INTENTO_MS, opciones.senal)
+        if (respuesta.status === 502 && opciones.proxyPuedeCortar) fallo = 'quiza-llego'
+        else if (respuesta.status === 502 || respuesta.status === 503) fallo = 'no-llego'
         else if (respuesta.status === 504) fallo = 'quiza-llego'
         else return respuesta
       } catch (error) {

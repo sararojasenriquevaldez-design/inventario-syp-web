@@ -28,6 +28,9 @@ export function formatearDecimal(valor: Decimal, decimales: number): string {
   return negativo && /[1-9]/.test(texto) ? `-${texto}` : texto
 }
 
+/** Conteos enteros (filas, comprobantes): 1234 → "1,234". */
+export const formatearEntero = (valor: number) => formatearDecimal(String(valor), 0)
+
 /** Toneladas con 4 decimales: "1234.5" → "1,234.5000". */
 export const formatearToneladas = (valor: Decimal) => formatearDecimal(valor, 4)
 
@@ -42,6 +45,47 @@ export const formatearCU = (valor: Decimal, detalle = false) => formatearDecimal
 
 /** Tipo de cambio con 3 decimales. */
 export const formatearTipoCambio = (valor: Decimal) => formatearDecimal(valor, 3)
+
+const SUPERINDICE: Record<string, string> = {
+  '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹',
+}
+
+/** Valor exacto en notación científica ("2.58e-10" → mantisa "2.58", exponente "-10"); null si es 0 o no es un número. */
+function notacionCientifica(valor: Decimal): { mantisa: string; exponente: string } | null {
+  let exacto: Big
+  try {
+    exacto = new Big((valor ?? '').trim())
+  } catch {
+    return null
+  }
+  if (exacto.eq(0)) return null
+  const [mantisa, exponente] = exacto.toExponential().split('e')
+  return { mantisa, exponente: exponente.replace('+', '') }
+}
+
+/**
+ * Diferencia de paridad: 6 decimales (los de la tolerancia) y, si no es cero, el valor exacto en notación
+ * científica legible: "2.58e-10" → "0.000000 (2.58 × 10⁻¹⁰)"; "0" → "0.000000".
+ */
+export function formatearDiferencia(valor: Decimal): string {
+  const texto = formatearDecimal(valor, 6)
+  const notacion = notacionCientifica(valor)
+  if (!notacion) return texto
+  const superindice = notacion.exponente.replace(/[-0-9]/g, (c) => SUPERINDICE[c])
+  return `${texto} (${notacion.mantisa} × 10${superindice})`
+}
+
+/**
+ * La misma diferencia dicha en palabras para lectores de pantalla (los superíndices no se leen bien):
+ * "2.58e-10" → "0.000000, valor exacto 2.58 por 10 a la menos 10"; "0" → "0.000000".
+ */
+export function leerDiferencia(valor: Decimal): string {
+  const texto = formatearDecimal(valor, 6)
+  const notacion = notacionCientifica(valor)
+  if (!notacion) return texto
+  const enPalabras = (numero: string) => (numero.startsWith('-') ? `menos ${numero.slice(1)}` : numero)
+  return `${texto}, valor exacto ${enPalabras(notacion.mantisa)} por 10 a la ${enPalabras(notacion.exponente)}`
+}
 
 /** "2026-03-15" → "15/03/2026", partiendo el texto (sin new Date: evita el corrimiento por zona horaria). */
 export function formatearFecha(fecha: string | null | undefined): string {
